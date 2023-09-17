@@ -1,4 +1,3 @@
-use crate::cmp;
 use crate::mem::{self, MaybeUninit, SizedTypeProperties};
 use crate::ptr;
 
@@ -61,7 +60,7 @@ use crate::ptr;
 /// we cannot swap any more, but a smaller rotation problem is left to solve
 /// ```
 /// when `left < right` the swapping happens from the left instead.
-pub unsafe fn ptr_rotate<T>(mut left: usize, mut mid: *mut T, mut right: usize) {
+pub const unsafe fn ptr_rotate<T>(mut left: usize, mut mid: *mut T, mut right: usize) {
     type BufType = [usize; 32];
     if T::IS_ZST {
         return;
@@ -129,7 +128,8 @@ pub unsafe fn ptr_rotate<T>(mut left: usize, mut mid: *mut T, mut right: usize) 
                 }
             }
             // finish the chunk with more rounds
-            for start in 1..gcd {
+            let mut start = 1;
+            while start < gcd {
                 // SAFETY: `gcd` is at most equal to `right` so all values in `1..gcd` are valid for
                 // reading and writing as per the function's safety contract, see [long-safety-expl]
                 // above
@@ -155,10 +155,14 @@ pub unsafe fn ptr_rotate<T>(mut left: usize, mut mid: *mut T, mut right: usize) 
                         i += right;
                     }
                 }
+                start += 1;
             }
             return;
-        // `T` is not a zero-sized type, so it's okay to divide by its size.
-        } else if cmp::min(left, right) <= mem::size_of::<BufType>() / mem::size_of::<T>() {
+        } else if {
+            // `T` is not a zero-sized type, so it's okay to divide by its size.
+            let max_elements_in_buffer = mem::size_of::<BufType>() / mem::size_of::<T>();
+            (left <= max_elements_in_buffer) || (right <= max_elements_in_buffer)
+        } {
             // Algorithm 2
             // The `[T; 0]` here is to ensure this is appropriately aligned for T
             let mut rawarray = MaybeUninit::<(BufType, [T; 0])>::uninit();
